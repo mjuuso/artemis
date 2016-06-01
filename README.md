@@ -72,5 +72,5 @@ python ui.py
 ```
 
 ## Roadmap
-- refactor Artemis, Environment and Component classes
-- DRY for cli.py and ui.py: the logic for CLI commands and Flask endpoints should be in a single place, either by introspecting the Artemis class or separately defining a single list of methods and arguments, which is used by both to generate endpoints
+- change Replication Controller support for Replica Set support
+- change deployment triggers to use the Kubernetes Deployments: http://kubernetes.io/docs/user-guide/deployments/
