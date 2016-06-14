@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import route53
 import inspect
+import socket
 
 
 class Artemis(object):
@@ -22,6 +23,13 @@ class Artemis(object):
                     self.endpoint_zone = conn.get_hosted_zone_by_id(z.id)
         else:
             self.endpoint_zone = False
+
+    def valid_ip(self, address):
+        try:
+            socket.inet_aton(address)
+            return True
+        except:
+            return False
 
     def get_environments(self):
         return self.environments
@@ -90,7 +98,7 @@ class Artemis(object):
         """Do initial provisioning of an environment in Kubernetes and Terraform."""
         self.call_provision_terraform(env_name)
         self.call_provision_kubernetes(env_name)
-        self.call_create_endpoints(env.name)
+        self.call_create_endpoints(env_name)
 
     def call_recreate_component(self, env_name, component_name):
         """Delete and (re-)create and component in an environment."""
@@ -136,7 +144,7 @@ class Artemis(object):
     def call_update_component(self, env_name, component_name, image_tag):
         """Update a component with a new image tag."""
         env = self.get_environment(env_name)
-        comp = env.get_component(comp_name)
+        comp = env.get_component(component_name)
         comp.set_image_tag(image_tag)
         self._kubectl("--namespace=%s rolling-update %s --image=%s" % (env.get_name(),
                                                                        comp.get_name(),
@@ -158,7 +166,10 @@ class Artemis(object):
                 continue
             elb = self._kubectl("--namespace=%s describe svc %s|grep Ingress|awk '{print $3}'" % (env.get_name(), spec['metadata']['name']))
             endpoint = "%s.%s.%s" % (spec['metadata']['name'], env.get_name(), self.config.get('endpoint_zone'))
-            rr, change_info = self.endpoint_zone.create_cname_record(endpoint, [elb])
+            if self.valid_ip(elb):
+                rr, change_info = self.endpoint_zone.create_a_record(endpoint, [elb])
+            else:
+                rr, change_info = self.endpoint_zone.create_cname_record(endpoint, [elb])
             print "Created endpoint: %s" % endpoint
 
         if self.config.get('terraform_command', False):
@@ -213,8 +224,13 @@ class Artemis(object):
         return env.get_version()
 
     def __get_environment_list(self):
-        return [Environment(i, self.__read_env_version(i))
-                for i in os.listdir("environments/")]
+        env_list = []
+
+        for i in os.listdir("environments/"):
+            if not os.path.isdir("environments/" + i):
+                continue
+            env_list.append(Environment(i, self.__read_env_version(i)))
+        return env_list
 
     def __get_kube_environment_list(self):
         return [{'name': env.split(" ")[0], 'version': env.split(" ")[1]}
